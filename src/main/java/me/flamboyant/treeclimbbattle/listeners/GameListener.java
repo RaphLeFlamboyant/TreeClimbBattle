@@ -12,13 +12,10 @@ import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.FoodLevelChangeEvent;
-import org.bukkit.event.entity.ProjectileHitEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
@@ -28,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class GameListener implements ILaunchablePlugin, Listener {
     private HashMap<HumanEntity, Location> playersLocation = new HashMap<>();
@@ -59,12 +57,13 @@ public class GameListener implements ILaunchablePlugin, Listener {
         running = true;
 
         customWorld = new WorldCreator("TreeClimbBattleWorld")
-                .environment(World.Environment.CUSTOM)
+                .environment(World.Environment.NORMAL)
                 .type(WorldType.FLAT)
                 .generatorSettings("{\"layers\": [{\"block\": \"bedrock\", \"height\": 1}, {\"block\": \"grass_block\", \"height\": 1}], \"biome\":\"plains\"}")
                 .generateStructures(false).createWorld();
 
         runningTask = Bukkit.getScheduler().runTaskLater(Common.plugin, () -> launchAfterCountdown(5), 20);
+        Common.server.getPluginManager().registerEvents(this, Common.plugin);
 
         return true;
     }
@@ -74,6 +73,16 @@ public class GameListener implements ILaunchablePlugin, Listener {
         if (!running) {
             return false;
         }
+
+        BlockPlaceEvent.getHandlerList().unregister(this);
+        CreatureSpawnEvent.getHandlerList().unregister(this);
+        ProjectileHitEvent.getHandlerList().unregister(this);
+        ProjectileLaunchEvent.getHandlerList().unregister(this);
+        EntityDamageEvent.getHandlerList().unregister(this);
+        FoodLevelChangeEvent.getHandlerList().unregister(this);
+        PlayerDropItemEvent.getHandlerList().unregister(this);
+        PlayerSwapHandItemsEvent.getHandlerList().unregister(this);
+        InventoryClickEvent.getHandlerList().unregister(this);
 
         Bukkit.getScheduler().cancelTask(runningTask.getTaskId());
 
@@ -85,8 +94,10 @@ public class GameListener implements ILaunchablePlugin, Listener {
             player.setSaturation(10);
         }
 
-        Bukkit.unloadWorld(customWorld, false);
-        Bukkit.getScheduler().runTaskLater(Common.plugin, () -> deleteFolder(new File("TreeClimbBattleWorld")), 5);
+        Bukkit.getScheduler().runTaskLater(Common.plugin, () -> {
+                    Bukkit.unloadWorld(customWorld, false);
+                    Bukkit.getScheduler().runTaskLater(Common.plugin, () -> deleteFolder(new File("TreeClimbBattleWorld")), 5);
+                }, 10 * 20);
 
         Bukkit.getLogger().info("Stopping Tree Climb Battle");
         running = false;
@@ -127,6 +138,25 @@ public class GameListener implements ILaunchablePlugin, Listener {
         return new ArrayList<>();
     }
 
+
+    private List<Material> woodBlocks;
+    private List<Material> getWoodMaterial() {
+        if (woodBlocks == null) {
+            List<String> woodTypes = Arrays.stream(Material.values()).filter(m -> m.toString().contains("PLANK")).map(m -> m.toString().split("_")[0]).collect(Collectors.toList());
+            woodBlocks = Arrays.stream(Material.values()).filter(m -> woodTypes.contains(m.toString().split("_")[0])).collect(Collectors.toList());
+        }
+
+        return woodBlocks;
+    }
+
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        if (event.getBlock().getWorld() != customWorld) return;
+        if (getWoodMaterial().contains(event.getBlock().getType()) || event.getBlock().getType() == Material.DIRT) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler
     public void onProjectileHit(ProjectileHitEvent event) {
         if (event.getEntity().getWorld() != customWorld) return;
@@ -136,13 +166,13 @@ public class GameListener implements ILaunchablePlugin, Listener {
     }
 
     @EventHandler
-    public void onInteract(PlayerInteractEvent event) {
-        if (!playersLocation.containsKey(event.getPlayer())) return;
-        if (event.getAction() != Action.RIGHT_CLICK_AIR || event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        if (event.getItem().getType() != Material.SNOWBALL) return;
+    public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        if (event.getEntityType() != EntityType.SNOWBALL) return;
+        if (!playersLocation.containsKey(event.getEntity().getShooter())) return;
 
-        event.getPlayer().setCooldown(Material.SNOWBALL, 5 * 20);
-        event.getPlayer().getInventory().addItem(snowBallItem(1));
+        Player player = (Player) event.getEntity().getShooter();
+        player.setCooldown(Material.SNOWBALL, 1 * 20);
+        player.getInventory().addItem(snowBallItem(1));
     }
 
     @EventHandler
@@ -150,6 +180,7 @@ public class GameListener implements ILaunchablePlugin, Listener {
         if (event.getEntity().getType() != EntityType.PLAYER) return;
         Player player = (Player) event.getEntity();
         if (!playersLocation.containsKey(player)) return;
+        if (player.getHealth() - event.getFinalDamage() > 0) return;
 
         event.setCancelled(true);
         player.teleport(zeroLocation);
@@ -189,6 +220,13 @@ public class GameListener implements ILaunchablePlugin, Listener {
             event.setCancelled(true);
     }
 
+    @EventHandler
+    public void onCreatureSpawn(CreatureSpawnEvent event) {
+        if (event.getEntity().getLocation().getWorld() != customWorld) return;
+
+        event.setCancelled(true);
+    }
+
     private void launchAfterCountdown(int countdown) {
         if (countdown > 0) {
             for (Player player : Common.server.getOnlinePlayers()) {
@@ -205,6 +243,8 @@ public class GameListener implements ILaunchablePlugin, Listener {
                 player.getInventory().addItem(foodItem(16));
                 player.teleport(zeroLocation);
             }
+
+            Common.server.getWorld("TreeClimbBattleWorld").getWorldBorder().setSize(10 * 16);
 
             runningTask = Bukkit.getScheduler().runTaskTimer(Common.plugin, this::checkWinTask, 20, 20);
             Bukkit.broadcastMessage(ChatHelper.titledMessage("La partie commence", "Plante des arbres pour atteindre le sommet ! Le premier à la couche 300 a gagné !"));
