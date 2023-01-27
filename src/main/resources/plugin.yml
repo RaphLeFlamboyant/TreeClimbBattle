@@ -1,0 +1,8 @@
+name: TreeClimbBattle
+version: '${project.version}'
+main: me.flamboyant.treeclimbbattle.Main
+api-version: 1.19
+commands:
+  f_tree_climb_battle:
+    description: Grow trees very fast and climb to reach the top first !
+    permission: f_tree_climb_battle.use

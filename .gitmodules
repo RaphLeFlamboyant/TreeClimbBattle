@@ -1,0 +1,3 @@
+[submodule "submodules/FlamboyantPluginTools"]
+	path = submodules/FlamboyantPluginTools
+	url = https://github.com/RaphLeFlamboyant/FlamboyantPluginTools.git
