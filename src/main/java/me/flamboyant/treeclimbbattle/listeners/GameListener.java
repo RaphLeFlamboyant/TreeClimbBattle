@@ -172,7 +172,7 @@ public class GameListener implements ILaunchablePlugin, Listener {
 
         Player player = (Player) event.getEntity().getShooter();
         player.setCooldown(Material.SNOWBALL, 1 * 20);
-        player.getInventory().addItem(snowBallItem(1));
+        Bukkit.getScheduler().runTaskLater(Common.plugin, () -> player.getInventory().addItem(snowBallItem(1)), 1);
     }
 
     @EventHandler
@@ -196,7 +196,7 @@ public class GameListener implements ILaunchablePlugin, Listener {
         if (!playersLocation.containsKey(event.getEntity())) return;;
         if (!ItemHelper.isSameItemKind(event.getItem(), foodItem(1))) return;
 
-        event.getEntity().getInventory().addItem(foodItem(1));
+        Bukkit.getScheduler().runTaskLater(Common.plugin, () -> event.getEntity().getInventory().addItem(foodItem(1)), 1);
     }
 
     @EventHandler
